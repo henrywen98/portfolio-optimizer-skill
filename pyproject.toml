@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "portfolio-engine"
+name = "portfolio-optimizer-skill"
 version = "3.0.0"
-description = "多市场投资组合优化引擎（美股 / A股 / 港股，多源自动回退）| Multi-market portfolio optimizer"
+description = "No-API-key multi-market portfolio optimizer as a Claude Code skill (US / A-shares / HK, auto data fallback)"
 readme = "README.md"
 license = {text = "MIT"}
-authors = [{name = "Henry Wen", email = "henrywen98@gmail.com"}]
+authors = [{name = "Henry Wen", email = "henrywen98@users.noreply.github.com"}]
 keywords = [
     "portfolio", "optimization", "sharpe-ratio", "efficient-frontier",
     "finance", "investment", "quantitative", "stocks", "us-stocks", "a-shares",
@@ -42,9 +42,9 @@ calendars = ["pandas-market-calendars>=4.3"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "black>=22.0", "isort>=5.0", "flake8>=5.0"]
 
 [project.urls]
-Homepage = "https://github.com/henrywen98/investment_portfolio_optimizer"
-Repository = "https://github.com/henrywen98/investment_portfolio_optimizer.git"
-Issues = "https://github.com/henrywen98/investment_portfolio_optimizer/issues"
+Homepage = "https://github.com/henrywen98/portfolio-optimizer-skill"
+Repository = "https://github.com/henrywen98/portfolio-optimizer-skill.git"
+Issues = "https://github.com/henrywen98/portfolio-optimizer-skill/issues"
 
 [tool.setuptools]
 packages = ["portfolio_engine"]

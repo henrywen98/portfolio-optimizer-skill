@@ -19,7 +19,7 @@
 
 __version__ = "3.0.0"
 __author__ = "Henry Wen"
-__email__ = "henrywen98@example.com"
+__email__ = "henrywen98@users.noreply.github.com"
 
 # 核心优化器
 from .optimizer import (

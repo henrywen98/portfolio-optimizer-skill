@@ -1,76 +1,100 @@
-# Portfolio Optimizer
+# Portfolio Optimizer Skill
 
-> 多市场投资组合优化 **Claude Code Skill** —— 把一组标的（**美股 / A股 / 港股**）配成一份最优权重，并给出完整风险报告。免 API key，数据源自动回退。
+> A **no-API-key, multi-market portfolio optimizer** that runs as a [Claude Code](https://claude.com/claude-code) skill — turn a list of tickers into an optimal weight allocation plus a full risk report, across **US stocks, China A-shares, and Hong Kong stocks**, with free data and zero setup.
 
-⚠️ **仅供教育 / 研究用途，不构成任何投资建议。**
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)
+![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-d97757.svg)
+![No API key](https://img.shields.io/badge/data-no%20API%20key-brightgreen.svg)
 
----
+**English** · [简体中文](README.zh-CN.md)
 
-## 这是一个 Claude Code Skill
-
-本仓库本身就是一个 skill，入口是 [`SKILL.md`](SKILL.md)。在 Claude Code 里直接用**自然语言**触发，无需记命令：
-
-- “帮我把 AAPL,MSFT,NVDA 配个最大夏普权重”
-- “这几只 A股 600519,000858,600036 做个最小方差配置，单只不超过 30%”
-- “对比一下这几个标的的几种配置策略，哪个夏普最高”
-
-Claude 会读取意图、调用下面的 CLI、再把结果讲清楚。
+> ⚠️ For **education / research only**. Nothing here is investment advice.
 
 ---
 
-## 快速开始（直接用引擎 / CLI）
+## What it is
+
+This repo **is** a Claude Code skill. Once installed, you drive it in plain language — Claude reads your intent, runs the bundled engine, and explains the result:
+
+- *"Optimize my portfolio of AAPL, MSFT, NVDA for max Sharpe"*
+- *"帮我把 600519,000858,600036 做个最小方差配置，单只不超过 30%"*
+- *"Compare a few allocation strategies for these tickers and tell me which has the best Sharpe"*
+
+No command memorization, no data plumbing, no exchange/API keys. It works the same whether you point it at Apple or at Kweichow Moutai.
+
+## Why this exists
+
+Asking a general-purpose LLM to "write some PyPortfolioOpt code" gets you the *math* — but it stalls the moment you need **real prices**. Free US data gets rate-limited from cloud IPs; A-share and Hong Kong tickers need exchange-prefix / `secid` resolution that's fiddly to get right; and every ad-hoc script reinvents the fallback logic. This skill is the part that's annoying to reproduce:
+
+| | This skill | Plain "ask Claude to write code" | A typical GitHub optimizer |
+|---|:---:|:---:|:---:|
+| Runs as a Claude Code skill (natural language) | ✅ | — | — |
+| **US + A-shares + HK**, auto market detection | ✅ | ⚠️ you wire it | usually one market |
+| **No API key**, multi-source auto-fallback | ✅ | ❌ stalls on data | varies |
+| 5 strategies + side-by-side compare | ✅ | ⚠️ partial | usually 1–2 |
+| Full risk report (Sharpe/Sortino/Calmar/VaR/CVaR/drawdown/concentration) | ✅ | ⚠️ partial | varies |
+| Rolling-rebalance backtest with trading costs | ✅ | ❌ | sometimes |
+| Offline CSV mode (any market, no network) | ✅ | ❌ | rare |
+
+The data layer is the moat: `auto` mode picks a source by market and falls back through **yfinance → akshare → East Money (direct) → local CSV** until one works — no key, anywhere.
+
+## Install
+
+It's a standard Claude Code skill — drop it in your skills directory:
 
 ```bash
+git clone https://github.com/henrywen98/portfolio-optimizer-skill \
+  ~/.claude/skills/portfolio-optimizer
+cd ~/.claude/skills/portfolio-optimizer
 pip install -r requirements.txt
+```
 
-# 美股，最大夏普
+Restart Claude Code and just ask it to optimize a portfolio — the skill triggers on intent. You can also run the engine directly (below) without Claude at all.
+
+## Quick start (CLI / no Claude needed)
+
+```bash
+# US stocks, max Sharpe
 python scripts/optimize.py --tickers AAPL,MSFT,NVDA,JPM,KO --strategy max_sharpe --years 3
 
-# A股，最小方差
-python scripts/optimize.py --tickers 600519,000858,600036 --strategy min_variance --years 3
+# A-shares, min variance, cap any single name at 30%
+python scripts/optimize.py --tickers 600519,000858,600036 --strategy min_variance --max-weight 0.3
 
-# 横向对比全部策略
-python scripts/optimize.py --tickers AAPL,MSFT,GOOGL --compare
+# Compare every strategy side by side (JSON out)
+python scripts/optimize.py --tickers AAPL,MSFT,GOOGL,AMZN,META --compare --format json
 
-# 用本地 CSV（离线 / 任意市场）
+# Offline: feed your own price CSV (any market)
 python scripts/optimize.py --csv prices.csv --strategy risk_parity
 ```
 
-滚动再平衡回测（进阶）：
+Rolling-rebalance backtest with trading costs (advanced):
 
 ```bash
 python scripts/backtest.py --tickers AAPL,MSFT,NVDA,JPM,KO --years 5 \
     --strategy max_sharpe --lookback 252 --rebalance 63
 ```
 
----
+## Strategies
 
-## 5 种优化策略
+| Strategy | `--strategy` | In one line |
+|---|---|---|
+| Max Sharpe | `max_sharpe` | Highest excess return per unit of risk (default) |
+| Min Variance | `min_variance` | Lowest portfolio volatility on the feasible set |
+| Risk Parity | `risk_parity` | Every holding contributes equal risk (convex risk-budgeting) |
+| Max Diversification | `max_diversification` | Maximize the diversification ratio |
+| Equal Weight | `equal_weight` | Naive 1/N benchmark |
 
-| 策略 | `--strategy` | 一句话 |
-|------|--------------|--------|
-| 最大夏普 | `max_sharpe` | 单位风险下追求最高超额收益（默认） |
-| 最小方差 | `min_variance` | 在可行集里把组合波动率压到最低 |
-| 风险平价 | `risk_parity` | 让每只标的对组合风险的贡献相等 |
-| 最大分散化 | `max_diversification` | 最大化分散化比率，摊薄集中度 |
-| 等权重 | `equal_weight` | 简单均分，作为对照基准 |
+## Data sources (no API key)
 
-**数据源**：`auto` 模式按市场自动选择并回退 —— yfinance → akshare → 东财直连 → 本地 CSV，全程免 API key。
+`auto` mode chooses by market and falls back until one succeeds:
 
----
-
-## 目录结构
-
-| 路径 | 作用 |
-|------|------|
-| `SKILL.md` | **skill 入口**：触发条件、用法、给 Claude 的指引 |
-| `portfolio_engine/` | 引擎包：优化器、数据获取、市场识别、约束、回测 |
-| `scripts/optimize.py` | CLI：单策略优化 + `--compare` 多策略对比 |
-| `scripts/backtest.py` | CLI：滚动窗口优化 + 定期再平衡回测 |
-| `references/` | 进阶文档（策略 / 数据源 / 约束与成本 / 回测） |
-| `tests/` | pytest 测试 |
-
----
+| Market | Ticker example | Source order |
+|---|---|---|
+| US | `AAPL`, `MSFT` | yfinance → akshare → East Money |
+| China A-share | `600519`, `000858` | akshare → East Money → yfinance |
+| Hong Kong | `00700`, `09988` | akshare → East Money → yfinance |
+| Any (offline) | `--csv prices.csv` | local CSV, no network |
 
 ## Python API
 
@@ -80,19 +104,39 @@ from portfolio_engine import PortfolioOptimizer
 opt = PortfolioOptimizer(strategy="max_sharpe", max_weight=0.3)
 weights, perf = opt.optimize_portfolio(tickers=["AAPL", "MSFT", "NVDA"], years=3)
 
-print(weights)                  # {'AAPL': 0.31, ...}
-print(perf["sharpe_ratio"])     # 夏普 / Sortino / Calmar / VaR / CVaR / 回撤 / 集中度
+print(weights)               # {'AAPL': 0.31, ...}
+print(perf["sharpe_ratio"])  # plus Sortino / Calmar / VaR / CVaR / drawdown / concentration
 ```
 
-风险指标涵盖 Sharpe / Sortino / Calmar / VaR / CVaR / 最大回撤 / 集中度（HHI、有效持仓数、前5大权重）。
+## Project structure
 
----
+| Path | Role |
+|---|---|
+| `SKILL.md` | **Skill entry** — triggering, usage, guidance for Claude |
+| `portfolio_engine/` | Engine: optimizer, data fetch, market detection, constraints, backtest |
+| `scripts/optimize.py` | CLI — single strategy + `--compare` |
+| `scripts/backtest.py` | CLI — rolling-window optimize + periodic rebalance |
+| `references/` | Deep-dive docs (strategies / metrics / data / constraints / backtesting) |
+| `tests/` | Offline pytest suite (no network) |
 
-## 了解更多
+## How it was built
 
-- skill 用法与触发：[`SKILL.md`](SKILL.md)
-- 进阶文档（行业约束、交易成本、回测等）：[`references/`](references/)
+This skill was refactored from a single-market A-share tool and then **hardened with an evaluation loop** (Claude-with-skill vs. a from-scratch baseline, graded across many prompts). That loop earned its keep: on a low-correlation portfolio the baseline *beat* the skill because the old iterative risk-parity routine was zeroing out valid assets on ill-conditioned covariance. The fix — switching to the convex Spinu/Maillard risk-budgeting formulation (`minimize ½·wᵀΣw − (1/n)·Σ ln wᵢ`) — now keeps every asset long-only with equalized risk contributions, and ships with a regression test. A skill is only worth triggering if it's never *worse* than just asking the model directly.
+
+See [`references/`](references/) for the strategy math, risk-metric definitions, the multi-source data design, and the backtest model.
+
+## Roadmap
+
+- More markets (LSE / TSE) behind the same auto-fallback
+- Black-Litterman / views-based allocation
+- Factor-tilt constraints
+
+Contributions welcome — open an issue or PR.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) · © 2025 Henry Wen
+
+---
+
+If this saved you from wiring up yet another data fetcher, a ⭐ helps other people find it.

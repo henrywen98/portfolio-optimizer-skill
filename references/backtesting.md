@@ -9,7 +9,7 @@
 
 ## CLI 参数
 
-`scripts/backtest.py` —— 路径 `/Users/henry/Documents/1_Project/investment_portfolio_optimizer/scripts/backtest.py`
+在仓库根目录下运行 `scripts/backtest.py`。
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
