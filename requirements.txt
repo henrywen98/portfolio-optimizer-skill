@@ -1,9 +1,16 @@
+# 运行时依赖（免 API key）
 pandas>=1.5
 numpy>=1.21
 scipy>=1.7
-pandas-market-calendars>=4.3
 PyPortfolioOpt>=1.5.5
-akshare>=1.12.0
+requests>=2.28
+
+# 行情数据源（可只装其一；auto 模式会自动回退）
+yfinance>=0.2.40        # 美股 / 全球
+akshare>=1.12.0         # A股 / 港股 / 美股（底层东方财富 + 新浪）
+
+# 可选：仅 get_valid_trade_range() 用到，主流程不依赖
+# pandas-market-calendars>=4.3
+
+# 测试
 pytest>=7.0
-streamlit>=1.28
-scikit-learn>=1.0

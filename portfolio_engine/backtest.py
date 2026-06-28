@@ -217,8 +217,8 @@ class Backtester:
             benchmark_prices = prices[benchmark_ticker].iloc[start_idx:]
             result.benchmark_values = benchmark_prices / benchmark_prices.iloc[0] * self.config.initial_capital
         else:
-            # 等权组合作为基准
-            equal_returns = prices.iloc[start_idx:].pct_change().mean(axis=1)
+            # 等权组合作为基准（首行 pct_change 为 NaN，需填 0，否则 cumprod 全成 NaN）
+            equal_returns = prices.iloc[start_idx:].pct_change().mean(axis=1).fillna(0)
             result.benchmark_values = (1 + equal_returns).cumprod() * self.config.initial_capital
 
         # 计算性能指标

@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [3.0.0] - 2026-06-28
+
+把整个仓库重构成一个 **Claude Code Skill**（`portfolio-optimizer`），并重新支持多市场。
+
+### 新增
+- **多市场**：美股 / A股 / 港股，按代码自动识别市场（`portfolio_engine/markets.py`）。
+- **多源数据自动回退**（免 API key）：yfinance → akshare → 东方财富直连 → CSV；
+  `auto` 模式按市场选源并逐级回退（`portfolio_engine/data.py`）。
+- **CSV 离线数据源**：`load_prices_csv()` / `--csv`，可跨任意市场、不依赖网络。
+- `SKILL.md` 作为 skill 入口；`scripts/optimize.py`（优化 + 对比）、`scripts/backtest.py`（回测）两个 CLI。
+- `references/` 文档：策略选择、风险指标、数据源、约束与成本、回测。
+
+### 变更
+- 引擎包 `maxsharpe/` 重命名为 `portfolio_engine/`；分发名 `portfolio-engine` 3.0.0。
+- CLI 输出支持 `--format json`，便于程序化解析；默认回溯改为 3 年。
+- `requires-python` 提升到 `>=3.9`；交易日历（pandas-market-calendars）改为可选依赖，主流程不再依赖。
+- 精简掉 Streamlit UI、Dockerfile、双语 README、examples，CI 收敛为离线测试。
+
+### 修复
+- 等权基准净值因 `pct_change` 首行 NaN 导致 `cumprod` 全为 NaN（Alpha/信息比率算成 NaN）的回测 bug。
+
 ## [未发布]
 
 ### 新增

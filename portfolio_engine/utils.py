@@ -22,16 +22,21 @@ def setup_logger(verbose: bool = True) -> None:
     )
 
 
-def get_valid_trade_range(start_date: str, end_date: str, exchange: str = "XSHG") -> Tuple[str, str]:
+def get_valid_trade_range(start_date: str, end_date: str, exchange: str = "NYSE") -> Tuple[str, str]:
     """
-    将输入的日期范围调整到实际的交易日
-    
+    将输入的日期范围调整到实际的交易日（可选工具，主流程不依赖它）。
+
+    数据源本身只会返回真实交易日，所以这步并非必需；保留它仅供需要严格对齐
+    交易日历的场景使用。依赖可选包 ``pandas-market-calendars``。
+
     Args:
         start_date: 开始日期 (YYYY-MM-DD)
         end_date: 结束日期 (YYYY-MM-DD)
-        exchange: 交易所代码
-            - XSHG: 上海证券交易所 (中国A股)
-    
+        exchange: 交易所日历代码
+            - ``NYSE``: 纽交所 / 纳斯达克 (美股)
+            - ``XSHG``: 上海证券交易所 (A股)
+            - ``XHKG``: 香港交易所 (港股)
+
     Returns:
         (start_date, end_date) 调整后的日期范围
     """
@@ -136,5 +141,5 @@ def format_performance_output(weights: dict, performance: dict) -> dict:
 
 
 def get_exchange_for_market(market: str) -> str:
-    """根据市场类型获取默认交易所（仅支持 CN）"""
-    return 'XSHG'
+    """根据市场类型返回 pandas-market-calendars 的交易所日历代码。"""
+    return {"US": "NYSE", "CN": "XSHG", "HK": "XHKG"}.get(str(market).upper(), "NYSE")

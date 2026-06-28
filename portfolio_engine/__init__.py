@@ -1,7 +1,7 @@
-"""
-Max Sharpe Portfolio Optimizer
+"""Portfolio Engine —— 多市场投资组合优化引擎。
 
-一个用于构建投资组合的Python工具包（仅支持中国A股）。
+一个免 API key 的投资组合优化工具包，支持 **美股 / A股 / 港股**，数据源自动回退
+（yfinance -> akshare -> 东财直连 -> CSV）。
 
 支持多种优化策略:
 - 最大夏普比率 (Max Sharpe)
@@ -11,13 +11,13 @@ Max Sharpe Portfolio Optimizer
 - 等权重 (Equal Weight)
 
 功能特性:
-- 多策略优化
-- 行业约束
-- 交易成本计算
-- 回测分析
+- 多市场、多数据源自动回退
+- 多策略优化与横向对比
+- 专业风险指标（Sharpe / Sortino / Calmar / VaR / CVaR / 回撤 / 集中度）
+- 行业约束、交易成本、滚动回测（进阶）
 """
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 __author__ = "Henry Wen"
 __email__ = "henrywen98@example.com"
 
@@ -33,13 +33,14 @@ from .optimizer import (
     PortfolioOptimizerFactory,
 )
 
-# 数据获取
-from .data import DataFetcher, get_default_tickers
+# 市场识别与数据获取
+from .markets import Market, detect_market, to_yfinance
+from .data import DataFetcher, get_default_tickers, load_prices_csv
 
 # 工具函数
 from .utils import get_valid_trade_range, calculate_returns, validate_price_data
 
-# 向后兼容接口
+# 主接口 / 向后兼容
 from .core import compute_max_sharpe, fetch_prices, PortfolioOptimizer
 
 # 约束模块
@@ -75,9 +76,13 @@ __all__ = [
     "OptimizationStrategy",
     "PortfolioOptimizerFactory",
 
-    # 数据
+    # 市场与数据
+    "Market",
+    "detect_market",
+    "to_yfinance",
     "DataFetcher",
     "get_default_tickers",
+    "load_prices_csv",
 
     # 工具
     "get_valid_trade_range",
