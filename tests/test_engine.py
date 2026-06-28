@@ -166,6 +166,25 @@ class TestOptimizers:
         _, perf = MaxDiversificationOptimizer().optimize(make_prices(assets=4))
         assert perf["diversification_ratio"] >= 1.0 - 1e-6
 
+    def test_risk_parity_equalizes_risk_and_keeps_all_assets(self):
+        """回归测试：风险平价在近零相关数据上不能把资产压成 0，且各风险贡献趋同。"""
+        rng = np.random.default_rng(11)
+        idx = pd.bdate_range("2023-01-02", periods=400)
+        # 5 个近乎不相关、波动差异大的资产 —— 旧迭代算法会在这种数据上退化压零
+        vols = [0.022, 0.013, 0.008, 0.011, 0.017]
+        prices = pd.DataFrame(
+            {f"A{i}": 100 * np.cumprod(1 + rng.normal(0.0004, v, 400)) for i, v in enumerate(vols)},
+            index=idx,
+        )
+        weights, _ = RiskParityOptimizer().optimize(prices)
+        assert all(w > 1e-3 for w in weights.values()), "风险平价不应把任何低相关资产压成 0"
+        # 校验风险贡献近似相等
+        S = (calculate_returns(prices).cov() * 252).values
+        w = np.array([weights[c] for c in prices.columns])
+        rc = w * (S @ w)
+        rc = rc / rc.sum()
+        assert np.allclose(rc, 1.0 / len(w), atol=0.03), f"风险贡献未拉平: {rc}"
+
     def test_factory_all_strategies(self):
         for strategy in OptimizationStrategy:
             assert PortfolioOptimizerFactory.create(strategy) is not None

@@ -292,60 +292,56 @@ class RiskParityOptimizer(BaseOptimizer):
         if returns.empty:
             raise ValueError("无法计算收益率")
 
-        # 计算协方差矩阵
         cov_matrix = self._get_covariance_matrix(returns)
-
-        # 使用迭代方法计算风险平价权重
         weights = self._compute_risk_parity_weights(cov_matrix)
 
-        # 应用权重约束
-        weights = self._apply_weight_constraints(weights)
-
-        cleaned_weights = {col: weights[i] for i, col in enumerate(returns.columns)}
+        cleaned_weights = {col: float(weights[i]) for i, col in enumerate(returns.columns)}
         performance = self._calculate_performance(returns, cleaned_weights)
 
         return cleaned_weights, performance
 
-    def _compute_risk_parity_weights(self, cov_matrix: pd.DataFrame,
-                                     max_iterations: int = 1000,
-                                     tolerance: float = 1e-8) -> np.ndarray:
+    def _compute_risk_parity_weights(self, cov_matrix: pd.DataFrame) -> np.ndarray:
+        """用凸优化求长仓风险平价权重（Spinu / Maillard 形式）。
+
+        最小化 ``f(w) = ½·wᵀΣw − (1/n)·Σ ln(wᵢ)``（``w > 0``），其唯一最优解满足
+        各资产对组合风险的贡献相等；再归一化到权重和为 1。
+
+        相比朴素的乘法迭代，这个凸形式对**近零相关 / 病态协方差**稳健，不会把
+        本应参与的低相关资产错误地压成 0。求解失败时回退到逆波动率（朴素风险平价，
+        恒为正权重），而非等权。
+
+        注意：``max_weight`` 对风险平价不适用——权重由「等风险贡献」决定，强加单一
+        上限会破坏其定义，因此这里不施加上限（``--max-weight`` 对该策略无效）。
         """
-        计算风险平价权重
+        Sigma = np.asarray(cov_matrix.values, dtype=float)
+        n = Sigma.shape[0]
 
-        使用迭代方法使每个资产的风险贡献相等
-        """
-        n = len(cov_matrix)
-        weights = np.ones(n) / n  # 初始等权重
+        # 逆波动率：既作初值，也作兜底（恒为正、不会压零）
+        inv_vol = 1.0 / np.sqrt(np.maximum(np.diag(Sigma), 1e-12))
+        x0 = inv_vol / inv_vol.sum()
 
-        for _ in range(max_iterations):
-            # 计算投资组合方差
-            portfolio_var = weights @ cov_matrix.values @ weights
+        try:
+            from scipy.optimize import minimize
 
-            # 计算边际风险贡献
-            marginal_risk = cov_matrix.values @ weights
+            def obj(w: np.ndarray) -> float:
+                return 0.5 * float(w @ Sigma @ w) - float(np.sum(np.log(w))) / n
 
-            # 计算风险贡献
-            risk_contrib = weights * marginal_risk / np.sqrt(portfolio_var)
+            def jac(w: np.ndarray) -> np.ndarray:
+                return Sigma @ w - 1.0 / (n * w)
 
-            # 目标风险贡献 (等分)
-            target_risk = np.sqrt(portfolio_var) / n
+            res = minimize(
+                obj, x0, jac=jac, method="L-BFGS-B",
+                bounds=[(1e-8, None)] * n,
+                options={"maxiter": 500, "ftol": 1e-12},
+            )
+            w = res.x if (res.success and np.all(np.isfinite(res.x))) else x0
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("风险平价凸优化失败(%s)，回退到逆波动率", exc)
+            w = x0
 
-            # 更新权重
-            new_weights = weights * target_risk / (risk_contrib + 1e-10)
-            new_weights = new_weights / new_weights.sum()  # 归一化
-
-            # 检查收敛
-            if np.max(np.abs(new_weights - weights)) < tolerance:
-                break
-
-            weights = new_weights
-
-        return weights
-
-    def _apply_weight_constraints(self, weights: np.ndarray) -> np.ndarray:
-        """应用权重约束"""
-        weights = np.clip(weights, self.min_weight, self.max_weight)
-        return weights / weights.sum()  # 重新归一化
+        w = np.clip(w, 0.0, None)
+        total = w.sum()
+        return w / total if total > 0 else np.ones(n) / n
 
 
 class MaxDiversificationOptimizer(BaseOptimizer):

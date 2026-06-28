@@ -32,11 +32,12 @@ portfolio-optimizer 提供 5 种策略（`portfolio_engine/optimizer.py`）。�
 - 注意：求解失败同样回退等权。
 
 ### risk_parity — 风险平价
-迭代法让每个资产对组合总风险的贡献相等（基于协方差矩阵，不依赖预期收益）。
+用**凸优化**（Spinu/Maillard 形式，最小化 `½wᵀΣw − (1/n)Σln wᵢ`）让每个资产对组合总风险的贡献相等（基于协方差矩阵，不依赖预期收益）。求解失败回退到逆波动率（朴素风险平价，恒为正权重）。
 
-- 优点：均衡，对单一资产暴雷更稳；不赌收益。
+- 优点：均衡，对单一资产暴雷更稳；不赌收益；对近零相关 / 病态协方差稳健，不会把低相关资产错误压成 0。
 - 缺点：低波动资产权重偏高，可能隐含杠杆偏好。
 - 适用：长期持有、追求稳健均衡的常用选择。
+- 注意：`--max-weight` 对本策略**无效**——权重由「等风险贡献」唯一决定，强加单一上限会破坏其定义。
 
 ### max_diversification — 最大分散化
 用 scipy `SLSQP` 最大化**分散化比率 = 加权平均个股波动 / 组合波动**（≥1，越大越分散）。
@@ -62,7 +63,7 @@ CLI 默认 `--max-weight 0.25`、`--min-weight 0.0`（约束 `0 ≤ min ≤ max 
 | max_sharpe | 仅当 max<1 或 min>0 时加进 EfficientFrontier 约束 | 是（求解器内强制） |
 | min_variance | 同上 | 是 |
 | max_diversification | 作为 SLSQP 的 `bounds` | 是 |
-| risk_parity | 迭代解出后 `clip` 到 [min,max] 再归一化 | 否（归一化可能把权重推回上限以外） |
+| risk_parity | **忽略 `--max-weight`**（权重由等风险贡献唯一决定） | 不适用 |
 | equal_weight | 完全忽略，恒为 1/N | 不适用 |
 
 实务建议：标的少时设 `--max-weight 0.3~0.5` 防过度集中；想强制每只都持有就用 `--min-weight`（注意会挤掉优化空间）。
