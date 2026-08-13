@@ -1,0 +1,7 @@
+# fetch_history.py 纯标准库，不需要装任何东西。
+# 只有 allocate.py 需要这两个：
+pandas>=1.5
+numpy>=1.21
+
+# 测试
+pytest>=7.0

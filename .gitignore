@@ -1,0 +1,6 @@
+data/*.csv
+portfolio-profile.json
+*.local.json
+__pycache__/
+.pytest_cache/
+.venv/

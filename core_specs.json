@@ -1,0 +1,8 @@
+[
+  {"code": "510300", "name": "沪深300ETF华泰柏瑞", "cls": "equity",   "lo": 0.0, "hi": 0.50},
+  {"code": "510500", "name": "中证500ETF南方",     "cls": "equity",   "lo": 0.0, "hi": 0.30},
+  {"code": "510880", "name": "红利ETF华泰柏瑞",     "cls": "equity",   "lo": 0.0, "hi": 0.30},
+  {"code": "511010", "name": "国债ETF国泰",         "cls": "bond",     "lo": 0.0, "hi": 0.80},
+  {"code": "518880", "name": "黄金ETF华安",         "cls": "gold",     "lo": 0.0, "hi": 0.20},
+  {"code": "513100", "name": "纳指ETF国泰",         "cls": "overseas", "lo": 0.0, "hi": 0.25}
+]
