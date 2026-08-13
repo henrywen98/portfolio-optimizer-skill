@@ -222,3 +222,69 @@ def test_cvar_is_worse_than_var():
     prices = _flat_prices(n=600)
     c = cvar(prices, {"safe": 0.5, "risky": 0.5})
     assert c["cvar_daily"] <= c["var_daily"]
+
+
+# --------------------------------------------------------------- p95 口径
+def test_p95_metric_is_never_looser_than_realized():
+    """同一个上限下，p95 口径选出的组合，其实现 MDD 必然也达标（超集关系）。"""
+    prices = _flat_prices(n=700)
+    r = solve(prices, _specs(), max_dd=0.40, step=0.10, risk_metric="p95",
+              screen_paths=100, confirm_paths=200)
+    assert r["metrics"]["max_drawdown"] >= -0.40 - 1e-9
+    assert r["bootstrap"]["p95"] >= -0.40 - 1e-9
+    assert r["risk_metric"] == "p95"
+
+
+def test_p95_metric_yields_no_better_return_than_realized():
+    """p95 是更严的约束，收益不可能高于 realized 口径。"""
+    prices = _flat_prices(n=700)
+    kw = dict(max_dd=0.40, step=0.10)
+    a = solve(prices, _specs(), risk_metric="realized", confirm_paths=200, **kw)
+    b = solve(prices, _specs(), risk_metric="p95", screen_paths=100, confirm_paths=200, **kw)
+    assert b["metrics"]["cagr"] <= a["metrics"]["cagr"] + 1e-9
+
+
+def _random_prices(n=900, seed=42):
+    """带真实随机性的价格表。
+
+    `_flat_prices` 是确定性折线，重采样后 MDD 恒等于那个人为的坑深——自助分布方差
+    为零，测不出 p95 与实现值的差异。凡是要检验分布性质的用例都用这个装置。
+    """
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2015-01-01", periods=n)
+    safe = 100 * np.cumprod(1 + rng.normal(0.0002, 0.002, n))
+    risky = 100 * np.cumprod(1 + rng.normal(0.0004, 0.018, n))
+    return pd.DataFrame({"safe": safe, "risky": risky}, index=idx)
+
+
+def test_bootstrap_p95_is_deeper_than_realized_on_stochastic_data():
+    """真实（随机）数据上，p95 必须显著深于实现值——这正是引入自助的理由。"""
+    prices = _random_prices()
+    b = bootstrap_drawdown(prices, {"safe": 0.5, "risky": 0.5}, n_paths=1500, block_days=40)
+    assert b["p95"] < b["median"]
+    assert b["p95"] < b["realized"]
+
+
+def test_p95_infeasible_message_explains_the_optimism_gap():
+    """p95 无解但 realized 有解时，报错要点明这个差异，别让人以为是 bug。"""
+    prices = _random_prices()
+    realized_ok = solve(prices, _specs(), max_dd=0.06, step=0.10,
+                        risk_metric="realized", confirm_paths=300)
+    assert realized_ok["metrics"]["max_drawdown"] >= -0.06  # realized 口径下有解
+    with pytest.raises(InfeasibleConstraint, match="自助 p95"):
+        solve(prices, _specs(), max_dd=0.06, step=0.10, risk_metric="p95",
+              screen_paths=300, confirm_paths=300)
+
+
+def test_reported_p95_never_breaches_the_cap():
+    """回归测试：返回结果里报告的 p95 必须真的满足上限。
+
+    早期两阶段实现用 800 条路径粗筛、3000 条复核，只信粗筛的结论，
+    结果返回过 p95=-25.4% 却声称满足 25% 上限的组合。
+    """
+    prices = _random_prices()
+    for cap in (0.08, 0.12, 0.20):
+        r = solve(prices, _specs(), max_dd=cap, step=0.05, risk_metric="p95",
+                  screen_paths=300, confirm_paths=1200)
+        assert r["bootstrap"]["p95"] >= -cap - 1e-9, \
+            f"上限 {cap:.0%} 但报告 p95 = {r['bootstrap']['p95']:.2%}"

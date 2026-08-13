@@ -363,6 +363,9 @@ def solve(
     objective: str = "cagr",
     n_splits: int = 3,
     horizon_years: Optional[float] = None,
+    risk_metric: str = "p95",
+    screen_paths: int = 800,
+    confirm_paths: int = 3000,
 ) -> Dict:
     """求满足回撤上限的最优权重。
 
@@ -391,6 +394,8 @@ def solve(
     """
     if objective not in ("cagr", "sharpe"):
         raise ValueError(f"objective 只能是 cagr 或 sharpe，收到 {objective}")
+    if risk_metric not in ("p95", "realized"):
+        raise ValueError(f"risk_metric 只能是 p95 或 realized，收到 {risk_metric}")
     if not 0 < max_dd < 1:
         raise ValueError(f"max_dd 应是 0~1 之间的正数（0.20 表示 20%），收到 {max_dd}")
 
@@ -443,8 +448,8 @@ def solve(
             continue
 
         n_compliant += 1
-        if len(compliant_sample) < 50:
-            compliant_sample.append({**metrics, "weights": dict(weights)})
+        # 全量留存：第二阶段要按收益降序扫这个池子做自助复核，只留前 50 个会漏解
+        compliant_sample.append({**metrics, "weights": dict(weights)})
         if best is None or metrics[objective] > best["metrics"][objective]:
             best = {"weights": dict(weights), "metrics": metrics}
 
@@ -460,6 +465,45 @@ def solve(
             best_weights=best_dd_weights,
         )
 
+    # ---------------------------------------------------------------- 第二阶段
+    # 上面按「实现 MDD」筛出的是超集：实现值是单条路径的一次抽样，通常落在自助分布的
+    # 中位数附近，因此 |实现| <= |p95|，{p95 达标} ⊆ {实现达标}。所以在这个超集里再
+    # 用自助 p95 复核不会漏解。按收益降序逐个复核，命中第一个就停。
+    bootstrap_result: Optional[Dict] = None
+    if risk_metric == "p95":
+        ranked = sorted(compliant_sample, key=lambda x: -x[objective])
+        picked = None
+        for cand in ranked:
+            # 先用少量路径粗筛（便宜），过了再用足量路径复核（准）。
+            # **以复核为准**：两个阶段路径数不同，抽样噪声会让粗筛放过实际超标的组合。
+            # 早期版本只信粗筛，结果返回过 p95=-25.4% 却声称满足 25% 上限的组合。
+            b = bootstrap_drawdown(prices, cand["weights"], n_paths=screen_paths,
+                                   block_days=40, rebalance=rebalance)
+            if b["p95"] < cap:
+                continue
+            b = bootstrap_drawdown(prices, cand["weights"], n_paths=confirm_paths,
+                                   block_days=40, rebalance=rebalance)
+            if b["p95"] >= cap:
+                picked = cand
+                bootstrap_result = b
+                break
+        if picked is None:
+            deepest = max((c["max_drawdown"] for c in ranked), default=best_dd_overall)
+            raise InfeasibleConstraint(
+                f"按自助 p95 口径，没有组合能把回撤控制在 {max_dd:.0%} 以内。"
+                f"（按实现 MDD 口径有 {n_compliant} 个候选达标——实现值是单条路径的一次抽样，"
+                f"系统性乐观。最浅的实现 MDD 是 {deepest:.1%}。）"
+                f"要么放宽上限，要么改用 risk_metric='realized' 承担这个乐观偏差。",
+                best_achievable=best_dd_overall,
+                best_weights=best_dd_weights,
+            )
+        best = {"weights": picked["weights"],
+                "metrics": {k: v for k, v in picked.items() if k != "weights"}}
+    else:
+        bootstrap_result = bootstrap_drawdown(prices, best["weights"],
+                                              n_paths=confirm_paths, block_days=40,
+                                              rebalance=rebalance)
+
     robustness = subperiod_check(prices, best["weights"], n_splits=n_splits, rebalance=rebalance)
     robustness["breached_in_subperiod"] = robustness["worst_subperiod_drawdown"] < cap - 1e-9
 
@@ -471,11 +515,13 @@ def solve(
     return {
         **best,
         "robustness": robustness,
+        "bootstrap": bootstrap_result,
+        "risk_metric": risk_metric,
         "holding_period": holding,
         "objective": objective,
         "n_candidates": n_candidates,
         "n_compliant": n_compliant,
-        "compliant_sample": compliant_sample,
+        "compliant_sample": compliant_sample[:50],
         "frontier": [
             {"max_drawdown_bucket": f"{b}~{b + 5}%", **{k: frontier[b][k] for k in ("cagr", "max_drawdown", "sharpe", "weights")}}
             for b in sorted(frontier)
@@ -505,6 +551,9 @@ def main() -> None:
     p.add_argument("--step", type=float, default=0.05, help="网格步长（默认 0.05）")
     p.add_argument("--rebalance", default="quarterly",
                    choices=["monthly", "quarterly", "yearly", "none"])
+    p.add_argument("--risk-metric", choices=["p95", "realized"], default="p95",
+                   help="回撤约束按哪个口径。p95=自助分布95分位（默认，诚实）；"
+                        "realized=历史实现值（快，但系统性乐观约6个百分点）")
     p.add_argument("--horizon-years", type=float,
                    help="用户的实际持有期（年）。给了就额外输出「持有这么久」的收益分布")
     p.add_argument("--allow-short-window", action="store_true",
@@ -528,6 +577,7 @@ def main() -> None:
             rebalance=None if args.rebalance == "none" else args.rebalance,
             require_covers=None if args.allow_short_window else DEFAULT_REQUIRE_COVERS,
             horizon_years=args.horizon_years,
+            risk_metric=args.risk_metric,
         )
     except InfeasibleConstraint as exc:
         print(json.dumps({
@@ -545,7 +595,9 @@ def main() -> None:
         "weights": {c: w for c, w in sorted(result["weights"].items(), key=lambda x: -x[1]) if w > 0},
         "names": name_by_code,
         "metrics": result["metrics"],
+        "risk_metric": result["risk_metric"],
         "robustness": result["robustness"],
+        "bootstrap": result["bootstrap"],
         "holding_period": result["holding_period"],
         "frontier": result["frontier"],
         "window": result["window"],

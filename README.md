@@ -18,8 +18,8 @@ ones that stayed inside your budget.
 
 **2. One realized drawdown is not a distribution.** The max drawdown your portfolio happened
 to have over one historical path is a single draw with an effective sample size of 1. Using it
-as a hard limit is optimistic. This skill also runs a stationary block bootstrap to estimate
-the *distribution* of drawdowns.
+as a hard limit is optimistic. So the constraint is enforced on the **95th percentile of a
+stationary block bootstrap**, not on the realized figure. That is the default.
 
 How much does that matter? On a 2014-2026 A-share dataset:
 
